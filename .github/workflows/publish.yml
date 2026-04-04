@@ -15,10 +15,10 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -36,7 +36,17 @@ jobs:
       - name: Publish with provenance
         run: |
           set -euo pipefail
-          npm publish --access public --provenance --ignore-scripts
+          PUBLISH_LOG="$(mktemp)"
+          set +e
+          npm publish --access public --provenance --ignore-scripts 2>&1 | tee "$PUBLISH_LOG"
+          PUBLISH_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$PUBLISH_EXIT" -ne 0 ]; then
+            echo "npm publish failed with exit code: $PUBLISH_EXIT"
+            echo "=== npm publish output ==="
+            cat "$PUBLISH_LOG"
+            exit "$PUBLISH_EXIT"
+          fi
 
       - name: Scan published package
         run: |
