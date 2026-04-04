@@ -41,7 +41,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish with provenance
+      - name: Publish package (trusted OIDC)
         run: |
           set -euo pipefail
           PUBLISH_LOG="$(mktemp)"
@@ -61,9 +61,31 @@ jobs:
           set -euo pipefail
           PACKAGE_NAME="$(node -p "require('./package.json').name")"
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          OUTPUT_FILE="$(mktemp)"
-          npx @n8n/scan-community-package "${PACKAGE_NAME}@${PACKAGE_VERSION}" | tee "$OUTPUT_FILE"
-          if grep -qi "has failed security checks" "$OUTPUT_FILE"; then
+          TARGET="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          MAX_ATTEMPTS=6
+          ATTEMPT=1
+          while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
+            echo "Running community package scan (attempt ${ATTEMPT}/${MAX_ATTEMPTS}) for ${TARGET}"
+            OUTPUT_FILE="$(mktemp)"
+            set +e
+            npx @n8n/scan-community-package "${TARGET}" | tee "$OUTPUT_FILE"
+            SCAN_EXIT=${PIPESTATUS[0]}
+            set -e
+            if [ "$SCAN_EXIT" -eq 0 ]; then
+              echo "Community package scan succeeded"
+              exit 0
+            fi
+            if /usr/bin/grep -qiE "Not Found|E404|not in this registry" "$OUTPUT_FILE"; then
+              if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+                echo "Package not yet replicated on npm registry. Retrying in 20s..."
+                /bin/sleep 20
+                ATTEMPT=$((ATTEMPT + 1))
+                continue
+              fi
+            fi
             echo "Community package scan failed"
-            exit 1
-          fi
+            cat "$OUTPUT_FILE"
+            exit "$SCAN_EXIT"
+          done
+          echo "Community package scan failed after retries"
+          exit 1
