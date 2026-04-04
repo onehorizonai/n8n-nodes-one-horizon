@@ -41,6 +41,18 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Validate npm auth
+        run: |
+          set -euo pipefail
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "NPM_TOKEN secret is missing in repository Actions secrets."
+            exit 1
+          fi
+          npm whoami --registry=https://registry.npmjs.org
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish with provenance
         run: npm publish --access public --provenance
         env:
