@@ -33,57 +33,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Configure npm token fallback
-        run: |
-          if [ -n "${NPM_TOKEN:-}" ]; then
-            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Validate npm auth
-        run: |
-          set -euo pipefail
-          if [ -z "${NPM_TOKEN:-}" ]; then
-            echo "NPM_TOKEN secret is missing in repository Actions secrets."
-            exit 1
-          fi
-          npm whoami --registry=https://registry.npmjs.org
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish with provenance
         run: |
           set -euo pipefail
-          PUBLISH_LOG="$(mktemp)"
-          if [ -n "${NPM_TOKEN:-}" ]; then
-            echo "Publishing with token bootstrap mode (no provenance)"
-            set +e
-            npm publish --access public 2>&1 | tee "$PUBLISH_LOG"
-            PUBLISH_EXIT=${PIPESTATUS[0]}
-            set -e
-          else
-            echo "Publishing with trusted publisher provenance"
-            set +e
-            npm publish --access public --provenance 2>&1 | tee "$PUBLISH_LOG"
-            PUBLISH_EXIT=${PIPESTATUS[0]}
-            set -e
-          fi
-          if [ "$PUBLISH_EXIT" -ne 0 ]; then
-            echo "npm publish failed with exit code: $PUBLISH_EXIT"
-            echo "=== npm publish output ==="
-            cat "$PUBLISH_LOG"
-            echo "=== newest npm debug log ==="
-            LATEST_NPM_LOG="$(ls -1t ~/.npm/_logs/*-debug-0.log | head -n 1 || true)"
-            if [ -n "${LATEST_NPM_LOG:-}" ]; then
-              cat "$LATEST_NPM_LOG"
-            fi
-            exit "$PUBLISH_EXIT"
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish --access public --provenance --ignore-scripts
 
       - name: Scan published package
         run: |
