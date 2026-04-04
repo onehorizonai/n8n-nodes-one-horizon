@@ -5,24 +5,32 @@ on:
     tags:
       - '*.*.*'
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
 
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify Node and npm versions
+        run: |
+          set -euo pipefail
+          echo "Node: $(node -v)"
+          echo "npm: $(npm -v)"
+          node -e "const [maj,min]=process.versions.node.split('.').map(Number); if (maj < 22 || (maj === 22 && min < 14)) { throw new Error('Trusted publishing requires Node >= 22.14.0'); }"
+          node -e "const [maj,min,patch]=require('child_process').execSync('npm -v').toString().trim().split('.').map(Number); if (maj < 11 || (maj === 11 && min < 5) || (maj === 11 && min === 5 && patch < 1)) { throw new Error('Trusted publishing requires npm >= 11.5.1'); }"
 
       - name: Install dependencies
         run: npm ci
@@ -38,7 +46,7 @@ jobs:
           set -euo pipefail
           PUBLISH_LOG="$(mktemp)"
           set +e
-          npm publish --access public --provenance --ignore-scripts 2>&1 | tee "$PUBLISH_LOG"
+          npm publish --access public --ignore-scripts 2>&1 | tee "$PUBLISH_LOG"
           PUBLISH_EXIT=${PIPESTATUS[0]}
           set -e
           if [ "$PUBLISH_EXIT" -ne 0 ]; then
