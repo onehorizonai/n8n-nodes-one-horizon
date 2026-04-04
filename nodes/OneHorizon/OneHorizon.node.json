@@ -1,0 +1,20 @@
+{
+	"node": "n8n-nodes-one-horizon",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": [
+		"Development"
+	],
+	"resources": {
+		"primaryDocumentation": [
+			{
+				"url": "https://onehorizon.ai/docs/integrations/n8n"
+			}
+		],
+		"credentialDocumentation": [
+			{
+				"url": "https://onehorizon.ai/docs/integrations/n8n"
+			}
+		]
+	}
+}

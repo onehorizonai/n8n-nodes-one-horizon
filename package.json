@@ -1,19 +1,23 @@
 {
-	"name": "n8n-nodes-<...>",
+	"name": "n8n-nodes-one-horizon",
 	"version": "0.1.0",
-	"description": "",
+	"description": "One Horizon MCP-backed n8n community node with typed operations and raw tool calls.",
 	"license": "MIT",
-	"homepage": "",
+	"homepage": "https://onehorizon.ai/docs/integrations/n8n",
 	"keywords": [
-		"n8n-community-node-package"
+		"n8n-community-node-package",
+		"one horizon",
+		"mcp",
+		"automation",
+		"onehorizon"
 	],
 	"author": {
-		"name": "",
-		"email": ""
+		"name": "One Horizon",
+		"email": "support@onehorizon.ai"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/<...>/n8n-nodes-<...>.git"
+		"url": "https://github.com/onehorizonai/n8n-nodes-one-horizon.git"
 	},
 	"scripts": {
 		"build": "n8n-node build",
@@ -21,6 +25,8 @@
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
+		"scan": "scan-community-package \"${npm_package_name}@${npm_package_version}\"",
+		"verify": "npm run lint && npm run build",
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
@@ -31,15 +37,14 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/GithubIssuesApi.credentials.js",
-			"dist/credentials/GithubIssuesOAuth2Api.credentials.js"
+			"dist/credentials/OneHorizonMcpOAuth2Api.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/GithubIssues/GithubIssues.node.js",
-			"dist/nodes/Example/Example.node.js"
+			"dist/nodes/OneHorizon/OneHorizon.node.js"
 		]
 	},
 	"devDependencies": {
+		"@n8n/scan-community-package": "^0.12.0",
 		"@n8n/node-cli": "*",
 		"eslint": "9.39.4",
 		"prettier": "3.8.1",
