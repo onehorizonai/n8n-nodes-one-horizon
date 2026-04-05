@@ -13,6 +13,7 @@ import { ApplicationError, NodeConnectionTypes, NodeOperationError } from 'n8n-w
 
 const MCP_CREDENTIAL_TYPE = 'oneHorizonMcpOAuth2Api';
 const DEFAULT_MCP_ENDPOINT = 'https://mcp.onehorizon.ai/mcp';
+const MCP_PROTOCOL_VERSION = '2025-03-26';
 
 const TASK_STATUS_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Open', value: 'Open' },
@@ -116,6 +117,45 @@ function isJsonRpcError<T>(response: JsonRpcResponse<T>): response is JsonRpcFai
 	return 'error' in response;
 }
 
+function stringifyUnknown(value: unknown): string {
+	if (typeof value === 'string') {
+		return value;
+	}
+
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+
+function getErrorMessageFromBody(body: unknown): string {
+	if (!body) return 'Unknown error response';
+	if (typeof body === 'string') return body;
+
+	if (typeof body === 'object') {
+		const payload = body as Record<string, unknown>;
+		if (typeof payload.message === 'string') {
+			return payload.message;
+		}
+
+		const payloadError = payload.error;
+		if (
+			payloadError &&
+			typeof payloadError === 'object' &&
+			typeof (payloadError as Record<string, unknown>).message === 'string'
+		) {
+			return String((payloadError as Record<string, unknown>).message);
+		}
+
+		if (typeof payload.error_description === 'string') {
+			return payload.error_description;
+		}
+	}
+
+	return stringifyUnknown(body);
+}
+
 function getOptionalString(
 	context: IExecuteFunctions,
 	name: string,
@@ -181,8 +221,12 @@ async function sendJsonRpcRequest<T>(
 		method: 'POST',
 		url: endpointUrl,
 		json: true,
+		ignoreHttpStatusErrors: true,
+		returnFullResponse: true,
 		headers: {
 			'Content-Type': 'application/json',
+			Accept: 'application/json, text/event-stream',
+			'mcp-protocol-version': MCP_PROTOCOL_VERSION,
 		},
 		body: {
 			jsonrpc: '2.0',
@@ -192,17 +236,50 @@ async function sendJsonRpcRequest<T>(
 		},
 	};
 
-	let response: JsonRpcResponse<T>;
+	let rawHttpResponse: {
+		statusCode?: number;
+		body?: unknown;
+	};
 	try {
-		response = (await context.helpers.httpRequestWithAuthentication.call(
+		rawHttpResponse = (await context.helpers.httpRequestWithAuthentication.call(
 			context,
 			MCP_CREDENTIAL_TYPE,
 			options,
-		)) as JsonRpcResponse<T>;
+		)) as {
+			statusCode?: number;
+			body?: unknown;
+		};
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const errorData = error as {
+			message?: string;
+			description?: string;
+			httpCode?: string | number;
+			statusCode?: number;
+			response?: unknown;
+		};
+		const httpCode = errorData.statusCode ?? errorData.httpCode;
+		const baseMessage =
+			errorData.description ?? errorData.message ?? (error instanceof Error ? error.message : String(error));
+		const responseMessage = getErrorMessageFromBody(errorData.response);
+		const codeSuffix = httpCode ? ` (HTTP ${httpCode})` : '';
+		const detailSuffix = responseMessage && responseMessage !== baseMessage ? `: ${responseMessage}` : '';
+		const message = `${baseMessage}${codeSuffix}${detailSuffix}`;
 		throw new ApplicationError(`MCP request failed: ${message}`);
 	}
+
+	const statusCode = rawHttpResponse.statusCode;
+	const responseBody = rawHttpResponse.body;
+
+	if (statusCode !== undefined && statusCode >= 400) {
+		const responseMessage = getErrorMessageFromBody(responseBody);
+		throw new ApplicationError(`MCP request failed (HTTP ${statusCode}): ${responseMessage}`);
+	}
+
+	if (!responseBody || typeof responseBody !== 'object') {
+		throw new ApplicationError(`MCP request failed: Unexpected response body: ${stringifyUnknown(responseBody)}`);
+	}
+
+	const response = responseBody as JsonRpcResponse<T>;
 
 	if (isJsonRpcError(response)) {
 		const errorSuffix = response.error.code
