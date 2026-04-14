@@ -8,8 +8,9 @@ import type {
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { ApplicationError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { ApplicationError, NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 const MCP_CREDENTIAL_TYPE = 'oneHorizonMcpOAuth2Api';
 const DEFAULT_MCP_ENDPOINT = 'https://mcp.onehorizon.ai/mcp';
@@ -257,22 +258,38 @@ async function sendJsonRpcRequest<T>(
 			statusCode?: number;
 			response?: unknown;
 		};
-		const httpCode = errorData.statusCode ?? errorData.httpCode;
-		const baseMessage =
-			errorData.description ?? errorData.message ?? (error instanceof Error ? error.message : String(error));
-		const responseMessage = getErrorMessageFromBody(errorData.response);
-		const codeSuffix = httpCode ? ` (HTTP ${httpCode})` : '';
-		const detailSuffix = responseMessage && responseMessage !== baseMessage ? `: ${responseMessage}` : '';
-		const message = `${baseMessage}${codeSuffix}${detailSuffix}`;
-		throw new ApplicationError(`MCP request failed: ${message}`);
+		const nodeApiErrorPayload: JsonObject = {
+			message:
+				errorData.description ??
+				errorData.message ??
+				(error instanceof Error ? error.message : String(error)),
+			description: getErrorMessageFromBody(errorData.response),
+			response: errorData.response as JsonObject[string],
+		};
+		if (errorData.httpCode !== undefined) {
+			nodeApiErrorPayload.httpCode = String(errorData.httpCode);
+		} else if (errorData.statusCode !== undefined) {
+			nodeApiErrorPayload.httpCode = String(errorData.statusCode);
+		}
+		if (errorData.statusCode !== undefined) {
+			nodeApiErrorPayload.statusCode = errorData.statusCode;
+		}
+
+		throw new NodeApiError(context.getNode(), nodeApiErrorPayload);
 	}
 
 	const statusCode = rawHttpResponse.statusCode;
 	const responseBody = rawHttpResponse.body;
 
 	if (statusCode !== undefined && statusCode >= 400) {
-		const responseMessage = getErrorMessageFromBody(responseBody);
-		throw new ApplicationError(`MCP request failed (HTTP ${statusCode}): ${responseMessage}`);
+		const nodeApiErrorPayload: JsonObject = {
+			statusCode,
+			httpCode: String(statusCode),
+			message: `MCP request failed with status code ${statusCode}`,
+			description: getErrorMessageFromBody(responseBody),
+			response: responseBody as JsonObject[string],
+		};
+		throw new NodeApiError(context.getNode(), nodeApiErrorPayload);
 	}
 
 	if (!responseBody || typeof responseBody !== 'object') {
@@ -1299,11 +1316,11 @@ export class OneHorizon implements INodeType {
 					continue;
 				}
 
-				throw new NodeOperationError(
-					node,
-					error instanceof Error ? error.message : 'Unknown One Horizon MCP error',
-					{ itemIndex },
-				);
+				if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+					throw error;
+				}
+
+				throw new NodeOperationError(node, error as Error, { itemIndex });
 			}
 		}
 

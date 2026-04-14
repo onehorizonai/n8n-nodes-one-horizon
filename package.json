@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-one-horizon",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "One Horizon MCP-backed n8n community node with typed operations and raw tool calls.",
 	"license": "MIT",
 	"homepage": "https://onehorizon.ai/docs/integrations/n8n",
